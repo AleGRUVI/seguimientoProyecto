@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seguimiento de proyectos</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root { --tinta: #1f3a5f; --fondo: #f3f5f8; --acento: #c8531e; }
+    body { background: var(--fondo); }
+    .cabecera { background: var(--tinta); color: #fff; padding: 1rem 1rem 0; }
+    .cabecera h1 { font-size: 1.25rem; margin: 0 0 .75rem; font-weight: 600; }
+    .pestanas { display: flex; gap: .25rem; max-width: 960px; margin: 0 auto; overflow-x: auto; }
+    .pestanas button { background: transparent; border: 0; color: #c9d4e3; padding: .6rem 1rem; white-space: nowrap;
+                       border-bottom: 3px solid transparent; font-weight: 500; }
+    .pestanas button.activa { color: #fff; border-bottom-color: var(--acento); }
+    .contenedor { max-width: 960px; margin: 1rem auto 2rem; padding: 0 .75rem; }
+    .tarjeta { background: #fff; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem;
+               box-shadow: 0 2px 10px rgba(31,58,95,.12); }
+    .angosta { max-width: 640px; margin-left: auto; margin-right: auto; }
+    .btn-guardar { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+    .btn-guardar:hover { background: #a94318; border-color: #a94318; color: #fff; }
+    .miniaturas { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: .5rem; margin-top: .75rem; }
+    .mini { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: #e4e8ee; }
+    .mini img { width: 100%; height: 100%; object-fit: cover; }
+    .mini button { position: absolute; top: 2px; right: 2px; border: 0; border-radius: 50%; width: 24px; height: 24px;
+                   background: rgba(0,0,0,.65); color: #fff; line-height: 1; }
+    .fila-proy { cursor: pointer; }
+    .fila-proy.sel { background: #e8eef7; }
+    .sucs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .25rem .75rem; }
+    .evid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+    .evid img { width: 100%; border-radius: 6px; display: block; }
+    .bloque-evid { break-inside: avoid; margin-bottom: 1.25rem; }
+    .desc { white-space: pre-wrap; }
+    dialog { border: 0; border-radius: 10px; padding: 1.25rem; width: 92%; max-width: 380px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    dialog::backdrop { background: rgba(31,58,95,.45); }
+    @media print {
+      body { background: #fff; }
+      .cabecera, .no-print { display: none !important; }
+      .tarjeta { box-shadow: none; padding: 0; }
+      .contenedor { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="cabecera">
+    <div class="d-flex justify-content-between align-items-baseline gap-2">
+      <h1>Seguimiento de proyectos</h1>
+      <span class="d-flex align-items-center gap-2">
+        <span id="usuario" class="small text-white-50 text-end"></span>
+        <button id="btnPin" type="button" class="btn btn-sm btn-outline-light" hidden>Cambiar PIN</button>
+        <button id="btnSalir" type="button" class="btn btn-sm btn-outline-light" hidden>Salir</button>
+      </span>
+    </div>
+    <div class="pestanas" id="pestanas">
+      <button data-vista="avance" hidden>Registrar avance</button>
+      <button data-vista="proyectos" hidden>Proyectos</button>
+      <button data-vista="consulta" hidden>Consulta por proyecto</button>
+      <button data-vista="accesos" hidden>Accesos</button>
+    </div>
+  </div>
+
+  <div class="contenedor">
+    <div id="aviso" class="no-print"></div>
+
+    <!-- ===================== VISTA: INICIAR SESIÓN ===================== -->
+    <section id="vista-login" hidden>
+      <div class="tarjeta angosta">
+        <h2 class="h5 mb-3">Iniciar sesión</h2>
+
+        <label class="form-label" for="loginCorreo">Correo</label>
+        <input id="loginCorreo" type="email" class="form-control mb-3" autocomplete="username" placeholder="correo@ejemplo.com">
+
+        <!-- Acceso principal: PIN -->
+        <div id="loginPin">
+          <label class="form-label" for="loginPinValor">PIN</label>
+          <input id="loginPinValor" type="password" class="form-control mb-3" autocomplete="current-password">
+          <button id="btnEntrarPin" type="button" class="btn btn-guardar w-100">Entrar</button>
+          <button id="btnUsarCodigo" type="button" class="btn btn-link w-100 mt-2">Entrar con código por correo</button>
+          <div class="form-text text-center">¿Sin PIN o lo olvidaste? Pide a un administrador que te lo asigne.</div>
+        </div>
+
+        <!-- Respaldo: código por correo -->
+        <div id="loginPaso1" hidden>
+          <p class="text-muted small">Te enviaremos un código de 6 dígitos al correo de arriba.</p>
+          <button id="btnEnviarCodigo" type="button" class="btn btn-guardar w-100">Enviar código</button>
+          <button id="btnVolverPin" type="button" class="btn btn-link w-100 mt-2">Volver a entrar con PIN</button>
+        </div>
+        <div id="loginPaso2" hidden>
+          <p class="text-muted small" id="loginMensaje"></p>
+          <label class="form-label" for="loginCodigo">Código de 6 dígitos</label>
+          <input id="loginCodigo" class="form-control form-control-lg text-center mb-3" inputmode="numeric"
+                 maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+          <button id="btnVerificar" type="button" class="btn btn-guardar w-100">Entrar</button>
+          <button id="btnOtroCorreo" type="button" class="btn btn-link w-100 mt-2">Volver a entrar con PIN</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA: REGISTRAR AVANCE ===================== -->
+    <section id="vista-avance" hidden>
+      <div class="tarjeta angosta">
+        <form id="formAvance" novalidate>
+          <div class="mb-3">
+            <label for="proyecto" class="form-label">Proyecto</label>
+            <select id="proyecto" class="form-select" required disabled><option value="">Cargando proyectos…</option></select>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label for="sucursal" class="form-label">Sucursal</label>
+              <select id="sucursal" class="form-select" required disabled><option value="">Primero elija un proyecto</option></select>
+            </div>
+            <div class="col-sm-6">
+              <label for="fecha" class="form-label">Fecha de realización</label>
+              <input id="fecha" type="date" class="form-control" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="responsable" class="form-label">Responsable</label>
+            <select id="responsable" class="form-select" required disabled><option value="">Cargando…</option></select>
+          </div>
+          <div class="mb-3">
+            <label for="descripcion" class="form-label">Descripción del trabajo</label>
+            <textarea id="descripcion" class="form-control" rows="4" required placeholder="¿Qué se hizo? ¿Qué falta?"></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="fotos" class="form-label">Evidencias (fotos)</label>
+            <input id="fotos" type="file" class="form-control" accept="image/*" multiple>
+            <div class="form-text">Máximo 10 fotos. Se reducen de tamaño automáticamente antes de subirse.</div>
+            <div id="miniaturas" class="miniaturas"></div>
+          </div>
+          <button id="btnGuardar" type="button" class="btn btn-guardar w-100 py-2">Guardar avance</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA: PROYECTOS ===================== -->
+    <section id="vista-proyectos" hidden>
+      <div class="tarjeta">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+          <select id="filtroEstado" class="form-select w-auto">
+            <option value="">Todos los proyectos</option>
+            <option value="Activo">Solo activos</option>
+            <option value="Cerrado">Solo cerrados</option>
+          </select>
+          <button id="btnNuevoProy" type="button" class="btn btn-outline-primary ms-auto">+ Nuevo proyecto</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>ID</th><th>Proyecto</th><th>Estado</th><th>Responsable</th><th>Inicio</th><th>Cierre</th></tr></thead>
+            <tbody id="listaProyectos"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tarjeta" id="tarjetaProyecto">
+        <h2 class="h5 mb-3" id="tituloProyecto">Nuevo proyecto</h2>
+        <div id="avisoCerrado" class="alert alert-secondary" hidden>Proyecto cerrado: solo lectura.</div>
+        <form id="formProyecto" novalidate>
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label" for="pId">ID</label>
+              <input id="pId" class="form-control" readonly placeholder="Se genera al guardar">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label" for="pEstado">Estado</label>
+              <input id="pEstado" class="form-control" readonly>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="pNombre">Nombre del proyecto</label>
+            <input id="pNombre" class="form-control" required>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-sm-4">
+              <label class="form-label" for="pResponsable">Responsable</label>
+              <select id="pResponsable" class="form-select" required></select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label" for="pInicio">Fecha de inicio</label>
+              <input id="pInicio" type="date" class="form-control" required>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label" for="pCierre">Fecha de cierre</label>
+              <input id="pCierre" type="date" class="form-control" readonly>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Sucursales involucradas</label>
+            <div id="pSucursales" class="sucs"></div>
+          </div>
+          <div class="d-flex flex-wrap gap-2" id="botonesProyecto">
+            <button id="btnGuardarProy" type="button" class="btn btn-guardar">Guardar proyecto</button>
+            <button id="btnCerrarProy" type="button" class="btn btn-outline-danger ms-auto" hidden>Cerrar proyecto</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA: CONSULTA ===================== -->
+    <section id="vista-consulta" hidden>
+      <div class="tarjeta no-print">
+        <div class="d-flex flex-wrap gap-2">
+          <select id="cProyecto" class="form-select flex-grow-1" style="min-width:240px"></select>
+          <button id="btnImprimir" type="button" class="btn btn-outline-primary" disabled>Imprimir / guardar PDF</button>
+        </div>
+      </div>
+      <div id="reporte"></div>
+    </section>
+
+    <!-- ===================== VISTA: ACCESOS (solo administradores) ===================== -->
+    <section id="vista-accesos" hidden>
+      <div class="tarjeta">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+          <h2 class="h5 mb-0">Usuarios y accesos</h2>
+          <button id="btnNuevoUsuario" type="button" class="btn btn-outline-primary ms-auto">+ Agregar usuario</button>
+        </div>
+        <p class="text-muted small">
+          Marca qué vistas puede abrir cada persona. Sin correo, la persona puede aparecer como responsable pero no puede
+          entrar a la aplicación. «Activo» en No quita el acceso y la oculta de las listas de responsables.
+          Para dar o restablecer el PIN de alguien, escríbelo en su fila (mínimo 6 caracteres) y guarda: dáselo en persona
+          y pídele que lo cambie con «Cambiar PIN». Si lo dejas vacío, el PIN actual no cambia.
+          El nombre no se puede cambiar una vez creado, porque los registros anteriores lo usan.
+        </p>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Nombre</th><th>Correo</th>
+                <th class="text-center">Activo</th><th class="text-center">Avance</th><th class="text-center">Proyectos</th>
+                <th class="text-center">Consulta</th><th class="text-center">Admin</th><th>PIN</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="listaUsuarios"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+<dialog id="dlgPin">
+  <h2 class="h6 mb-3">Cambiar mi PIN</h2>
+  <div class="mb-2">
+    <label class="form-label small" for="pinActual">PIN actual (déjalo vacío si aún no tienes)</label>
+    <input id="pinActual" type="password" class="form-control" autocomplete="current-password">
+  </div>
+  <div class="mb-2">
+    <label class="form-label small" for="pinNuevo">PIN nuevo (mínimo 6 caracteres)</label>
+    <input id="pinNuevo" type="password" class="form-control" autocomplete="new-password">
+  </div>
+  <div class="mb-2">
+    <label class="form-label small" for="pinNuevo2">Repite el PIN nuevo</label>
+    <input id="pinNuevo2" type="password" class="form-control" autocomplete="new-password">
+  </div>
+  <div id="dlgPinError" class="text-danger small mb-2"></div>
+  <div class="d-flex gap-2 justify-content-end">
+    <button id="btnPinCancelar" type="button" class="btn btn-outline-secondary btn-sm">Cancelar</button>
+    <button id="btnPinGuardar" type="button" class="btn btn-guardar btn-sm">Guardar PIN</button>
+  </div>
+</dialog>
+
+<script>
+  const MAX_FOTOS = 10;
+  let proyectos = [], sucursalesCat = [], responsablesCat = [], hoy = '';
+  let seleccionado = null;       // proyecto abierto en el formulario (null = nuevo)
+  let fotos = [];                // { nombre, data }
+  let avanceDesactualizado = true;
+  let tokenReporte = 0;
+
+  /* ---------- Utilidades ---------- */
+  const $ = id => document.getElementById(id);
+  // Token de sesión (se guarda en el navegador; si no se puede, solo vive mientras la página esté abierta)
+  let token = null, tokenMemoria = null;
+  const leerToken = () => { try { return localStorage.getItem('seguimiento_ptigv_token'); } catch (e) { return tokenMemoria; } };
+  const guardarToken = t => {
+    tokenMemoria = t;
+    try { t ? localStorage.setItem('seguimiento_ptigv_token', t) : localStorage.removeItem('seguimiento_ptigv_token'); } catch (e) { /* sin almacenamiento */ }
+  };
+  const MSG_EXPIRO = 'Tu sesión expiró. Vuelve a iniciar sesión.';
+
+  // ===== CONEXIÓN CON EL SERVICIO DE DATOS (Apps Script) =====
+  // Pega aquí la URL de tu implementación (termina en /exec)
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyR28KCcgaKKJJZ7LfVxwb0rS0b62NdY0DGV9iLGWlfzhNovyjXz5eqjnsJ9sUOAPOu/exec';
+
+  async function llamarApi(fn, args) {
+    if (API_URL.includes('PEGA_AQUI')) throw new Error('Falta configurar API_URL en index.html.');
+    let resp;
+    try {
+      // text/plain evita la comprobación previa de CORS, que Apps Script no admite
+      resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                    body: JSON.stringify({ fn: fn, args: args }) });
+    } catch (e) { throw new Error('No se pudo conectar con el servidor. Revisa tu conexión a internet.'); }
+    let r;
+    try { r = await resp.json(); }
+    catch (e) { throw new Error('El servidor no devolvió una respuesta válida. Revisa que la implementación tenga acceso «Cualquier persona» y que la URL termine en /exec.'); }
+    if (!r.ok) throw new Error(r.error || 'Error desconocido.');
+    return r.data;
+  }
+
+  // Llamada con el token de sesión
+  const srv = (fn, ...args) => llamarApi(fn, [token, ...args])
+    .then(r => {
+      if (r && r.error === 'SESION_EXPIRADA') { sesionExpirada(); throw new Error(MSG_EXPIRO); }
+      return r;
+    })
+    .catch(e => {
+      if (String((e && e.message) || e).includes('SESION_EXPIRADA')) { sesionExpirada(); throw new Error(MSG_EXPIRO); }
+      throw e;
+    });
+
+  // Llamada sin token (solo para entrar con PIN o pedir/validar el código)
+  const srvPublico = (fn, ...args) => llamarApi(fn, args);
+
+  function h(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    Object.entries(props || {}).forEach(([k, v]) => {
+      if (k === 'class') e.className = v;
+      else if (k.startsWith('on')) e[k] = v;
+      else e.setAttribute(k, v);
+    });
+    kids.flat().forEach(k => e.append(k instanceof Node ? k : document.createTextNode(k ?? '')));
+    return e;
+  }
+
+  function aviso(tipo, ...contenido) {
+    const caja = h('div', { class: 'alert alert-' + tipo + ' alert-dismissible', role: 'alert' }, ...contenido,
+      h('button', { type: 'button', class: 'btn-close', 'data-bs-dismiss': 'alert', 'aria-label': 'Cerrar' }));
+    $('aviso').replaceChildren(caja);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const fmt = s => s ? s.split('-').reverse().join('/') : '';
+
+  function llenarSelect(id, opciones, placeholder) {
+    const sel = $(id);
+    sel.replaceChildren(new Option(placeholder, ''));
+    opciones.forEach(o => sel.appendChild(new Option(o.texto, o.valor)));
+    sel.disabled = opciones.length === 0;
+  }
+
+  const insignia = estado =>
+    h('span', { class: 'badge ' + (estado === 'Activo' ? 'text-bg-success' : 'text-bg-secondary') }, estado);
+
+  /* ---------- Navegación ---------- */
+  function irA(vista) {
+    document.querySelectorAll('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.vista === vista));
+    $('vista-login').hidden = true;
+    ['avance', 'proyectos', 'consulta', 'accesos'].forEach(v => { $('vista-' + v).hidden = v !== vista; });
+    $('aviso').replaceChildren();
+    if (vista === 'accesos') cargarAccesos();
+    if (vista === 'avance' && avanceDesactualizado) cargarAvance();
+    if (vista === 'proyectos') cargarProyectos().then(() => mostrarProyecto(seleccionado ? proyectos.find(p => p.id === seleccionado.id) || null : null));
+    if (vista === 'consulta') cargarProyectos().then(llenarConsulta);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('#pestanas button').forEach(b => b.onclick = () => irA(b.dataset.vista));
+
+    // Avance
+    $('proyecto').addEventListener('change', alCambiarProyecto);
+    $('fotos').addEventListener('change', alElegirFotos);
+    $('btnGuardar').onclick = guardarAvance;
+
+    // Proyectos
+    $('filtroEstado').onchange = pintarLista;
+    $('btnNuevoProy').onclick = () => { mostrarProyecto(null); $('tarjetaProyecto').scrollIntoView({ behavior: 'smooth' }); };
+    $('btnGuardarProy').onclick = guardarProyecto;
+    $('btnCerrarProy').onclick = cerrarProyecto;
+
+    // Consulta
+    $('cProyecto').onchange = () => cargarReporte($('cProyecto').value);
+    $('btnImprimir').onclick = () => window.print();
+
+    // Accesos
+    $('btnNuevoUsuario').onclick = () => pintarAccesos(true);
+
+    // Login
+    $('btnEntrarPin').onclick = entrarConPin;
+    $('btnUsarCodigo').onclick = () => { $('aviso').replaceChildren(); mostrarPaso('codigo1'); };
+    $('btnEnviarCodigo').onclick = enviarCodigo;
+    $('btnVerificar').onclick = verificarCodigo;
+    $('btnVolverPin').onclick = () => { $('aviso').replaceChildren(); mostrarPaso('pin'); };
+    $('btnOtroCorreo').onclick = () => { $('aviso').replaceChildren(); $('loginCodigo').value = ''; mostrarPaso('pin'); };
+    $('loginCorreo').addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      if ($('loginPin').hidden) enviarCodigo(); else $('loginPinValor').focus();
+    });
+    $('loginPinValor').addEventListener('keydown', e => { if (e.key === 'Enter') entrarConPin(); });
+    $('loginCodigo').addEventListener('keydown', e => { if (e.key === 'Enter') verificarCodigo(); });
+    $('btnSalir').onclick = salir;
+
+    // Cambiar mi PIN
+    $('btnPin').onclick = abrirDialogoPin;
+    $('btnPinCancelar').onclick = () => $('dlgPin').close();
+    $('btnPinGuardar').onclick = guardarMiPin;
+
+    iniciar();
+  });
+
+  /* =====================================================================
+     SESIÓN: qué pestañas ve cada persona (el servidor vuelve a validar todo)
+     ===================================================================== */
+  let sesion = null;
+
+  function mostrarLogin() {
+    ['avance', 'proyectos', 'consulta', 'accesos'].forEach(v => { $('vista-' + v).hidden = true; });
+    document.querySelectorAll('#pestanas button').forEach(b => { b.hidden = true; });
+    $('usuario').textContent = ''; $('btnSalir').hidden = true; $('btnPin').hidden = true;
+    $('loginPinValor').value = ''; $('loginCodigo').value = '';
+    mostrarPaso('pin');
+    $('vista-login').hidden = false;
+    avanceDesactualizado = true;
+  }
+
+  function mostrarPaso(paso) {
+    $('loginPin').hidden = paso !== 'pin';
+    $('loginPaso1').hidden = paso !== 'codigo1';
+    $('loginPaso2').hidden = paso !== 'codigo2';
+  }
+
+  function sesionExpirada() {
+    token = null; guardarToken(null); sesion = null;
+    if ($('dlgPin').open) $('dlgPin').close();
+    mostrarLogin();
+  }
+
+  async function enviarCodigo() {
+    const correo = $('loginCorreo').value.trim();
+    if (!correo) { aviso('warning', 'Escribe tu correo.'); return; }
+    const btn = $('btnEnviarCodigo'); btn.disabled = true;
+    try {
+      const res = await srvPublico('solicitarCodigo', correo);
+      if (res.exito) {
+        $('aviso').replaceChildren();
+        $('loginMensaje').textContent = res.mensaje;
+        mostrarPaso('codigo2');
+        $('loginCodigo').focus();
+      } else aviso('danger', res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false;
+  }
+
+  async function verificarCodigo() {
+    const codigo = $('loginCodigo').value.trim();
+    if (!codigo) { aviso('warning', 'Escribe el código que recibiste.'); return; }
+    const btn = $('btnVerificar'); btn.disabled = true;
+    try {
+      const res = await srvPublico('verificarCodigo', $('loginCorreo').value.trim(), codigo);
+      if (res.exito) {
+        token = res.token; guardarToken(token);
+        $('aviso').replaceChildren();
+        await iniciar();
+      } else aviso('danger', res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false;
+  }
+
+  async function entrarConPin() {
+    const correo = $('loginCorreo').value.trim(), pin = $('loginPinValor').value;
+    if (!correo || !pin) { aviso('warning', 'Escribe tu correo y tu PIN.'); return; }
+    const btn = $('btnEntrarPin'); btn.disabled = true;
+    try {
+      const res = await srvPublico('iniciarSesionPin', correo, pin);
+      if (res.exito) {
+        token = res.token; guardarToken(token);
+        $('aviso').replaceChildren(); $('loginPinValor').value = '';
+        await iniciar();
+      } else aviso('danger', res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false;
+  }
+
+  function abrirDialogoPin() {
+    ['pinActual', 'pinNuevo', 'pinNuevo2'].forEach(id => { $(id).value = ''; });
+    $('dlgPinError').textContent = '';
+    $('dlgPin').showModal();
+  }
+
+  async function guardarMiPin() {
+    const actual = $('pinActual').value, nuevo = $('pinNuevo').value, nuevo2 = $('pinNuevo2').value;
+    const err = t => { $('dlgPinError').textContent = t; };
+    if (nuevo.length < 6) { err('El PIN debe tener al menos 6 caracteres.'); return; }
+    if (nuevo !== nuevo2) { err('Los PIN no coinciden.'); return; }
+    const btn = $('btnPinGuardar'); btn.disabled = true;
+    try {
+      const res = await srv('cambiarMiPin', actual, nuevo);
+      if (res.exito) {
+        token = res.token; guardarToken(token); // el token anterior ya no vale: se reemplaza por el nuevo
+        $('dlgPin').close();
+        aviso('success', 'PIN actualizado.');
+      } else err(res.error);
+    } catch (e) { err(e.message); }
+    btn.disabled = false;
+  }
+
+  function salir() {
+    // La sesión vive en este dispositivo: al salir se borra el token y se vuelve al login.
+    sesionExpirada();
+    $('aviso').replaceChildren();
+  }
+
+  async function iniciar() {
+    token = leerToken();
+    if (!token) { mostrarLogin(); return; }
+    $('btnSalir').hidden = false; $('btnPin').hidden = false;
+    try { sesion = await srv('obtenerSesion'); }
+    catch (e) { if (token) aviso('danger', 'No se pudo validar tu acceso: ' + e.message); return; }
+
+    $('usuario').textContent = sesion.email
+      ? (sesion.nombre !== sesion.email ? sesion.nombre + ' · ' : '') + sesion.email : '';
+
+    const permitidas = ['avance', 'proyectos', 'consulta'].filter(v => sesion.vistas[v]);
+    if (sesion.admin) permitidas.push('accesos');
+    document.querySelectorAll('#pestanas button').forEach(b => { b.hidden = !permitidas.includes(b.dataset.vista); });
+
+    if (!permitidas.length) {
+      aviso('warning', sesion.email
+        ? 'La cuenta ' + sesion.email + ' no tiene acceso a esta aplicación. Pide a un administrador que te dé de alta.'
+        : 'No se pudo identificar tu cuenta de Google. Abre la aplicación con tu cuenta de la organización.');
+      return;
+    }
+    irA(permitidas[0]);
+  }
+
+  /* =====================================================================
+     VISTA 1: REGISTRAR AVANCE
+     ===================================================================== */
+  async function cargarAvance() {
+    try {
+      const res = await srv('obtenerCatalogos');
+      const previo = $('proyecto').value;
+      avanceProyectos = res.proyectos;
+      llenarSelect('proyecto', res.proyectos.map(p => ({ valor: p.id, texto: p.id + ' · ' + p.nombre })),
+                   res.proyectos.length ? 'Seleccione proyecto…' : 'No hay proyectos activos');
+      llenarSelect('responsable', res.responsables.map(r => ({ valor: r, texto: r })), 'Seleccione responsable…');
+      if (previo && res.proyectos.some(p => p.id === previo)) { $('proyecto').value = previo; alCambiarProyecto.call($('proyecto')); }
+      if (!$('fecha').value) $('fecha').value = res.hoy;
+      $('fecha').max = res.hoy;
+      avanceDesactualizado = false;
+    } catch (e) { aviso('danger', 'No se pudieron cargar los catálogos: ' + e.message); }
+  }
+  let avanceProyectos = [];
+
+  function alCambiarProyecto() {
+    const p = avanceProyectos.find(x => x.id === this.value);
+    if (p) {
+      llenarSelect('sucursal', p.sucursales.map(s => ({ valor: s, texto: s })),
+                   p.sucursales.length ? 'Seleccione sucursal…' : 'Sin sucursales disponibles');
+      if (p.sucursales.length === 1) $('sucursal').value = p.sucursales[0];
+      const resp = $('responsable');
+      if (p.responsable && [...resp.options].some(o => o.value === p.responsable)) resp.value = p.responsable;
+    } else {
+      llenarSelect('sucursal', [], 'Primero elija un proyecto');
+    }
+  }
+
+  async function alElegirFotos(e) {
+    const archivos = Array.from(e.target.files);
+    e.target.value = '';
+    for (const f of archivos) {
+      if (fotos.length >= MAX_FOTOS) { aviso('warning', 'Máximo ' + MAX_FOTOS + ' fotos.'); break; }
+      try { fotos.push({ nombre: f.name, data: await comprimir(f) }); }
+      catch (err) { aviso('warning', err.message); }
+    }
+    pintarMiniaturas();
+  }
+
+  function comprimir(file, max = 1600, calidad = 0.8) {
+    return new Promise((ok, fallo) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const esc = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * esc);
+        c.height = Math.round(img.height * esc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok(c.toDataURL('image/jpeg', calidad));
+      };
+      img.onerror = () => fallo(new Error('No se pudo leer la imagen ' + file.name));
+      img.src = url;
+    });
+  }
+
+  function pintarMiniaturas() {
+    $('miniaturas').replaceChildren(...fotos.map((f, i) =>
+      h('div', { class: 'mini' },
+        h('img', { src: f.data, alt: f.nombre }),
+        h('button', { type: 'button', 'aria-label': 'Quitar foto', onclick: () => { fotos.splice(i, 1); pintarMiniaturas(); } }, '×'))));
+  }
+
+  async function guardarAvance() {
+    const form = $('formAvance');
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+    const btn = $('btnGuardar');
+    btn.disabled = true;
+    btn.replaceChildren(h('span', { class: 'spinner-border spinner-border-sm me-2' }), 'Guardando…');
+
+    try {
+      const res = await srv('guardarAvance', {
+        idProyecto: $('proyecto').value, sucursal: $('sucursal').value, fecha: $('fecha').value,
+        responsable: $('responsable').value, descripcion: $('descripcion').value, fotos: fotos
+      });
+      if (res.exito) {
+        aviso('success', 'Avance guardado. Folio ', h('strong', {}, res.folio), '. ',
+              h('a', { href: res.carpetaUrl, target: '_blank' }, 'Ver evidencias'));
+        const f = $('fecha').value;
+        form.reset(); fotos = []; pintarMiniaturas();
+        llenarSelect('sucursal', [], 'Primero elija un proyecto');
+        $('fecha').value = f;
+      } else aviso('danger', 'No se guardó: ' + res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false; btn.textContent = 'Guardar avance';
+  }
+
+  /* =====================================================================
+     VISTA 2: PROYECTOS (alta, edición y cierre)
+     ===================================================================== */
+  async function cargarProyectos() {
+    try {
+      const res = await srv('listarProyectos');
+      proyectos = res.proyectos; sucursalesCat = res.sucursales; responsablesCat = res.responsables; hoy = res.hoy;
+      pintarLista();
+    } catch (e) { aviso('danger', 'No se pudieron cargar los proyectos: ' + e.message); }
+  }
+
+  function pintarLista() {
+    const filtro = $('filtroEstado').value;
+    const filas = proyectos.filter(p => !filtro || p.estado === filtro);
+    $('listaProyectos').replaceChildren(...(filas.length ? filas.map(p =>
+      h('tr', { class: 'fila-proy' + (seleccionado && seleccionado.id === p.id ? ' sel' : ''),
+                onclick: () => { mostrarProyecto(p); $('tarjetaProyecto').scrollIntoView({ behavior: 'smooth' }); } },
+        h('td', {}, p.id), h('td', {}, p.nombre), h('td', {}, insignia(p.estado)),
+        h('td', {}, p.responsable), h('td', {}, fmt(p.inicio)), h('td', {}, fmt(p.cierre))))
+      : [h('tr', {}, h('td', { colspan: 6, class: 'text-muted' }, 'No hay proyectos para mostrar.'))]));
+  }
+
+  function mostrarProyecto(p) {
+    seleccionado = p;
+    const cerrado = !!p && p.estado !== 'Activo';
+    $('tituloProyecto').textContent = p ? p.id : 'Nuevo proyecto';
+    $('avisoCerrado').hidden = !cerrado;
+
+    $('pId').value = p ? p.id : '';
+    $('pEstado').value = p ? p.estado : 'Activo';
+    $('pNombre').value = p ? p.nombre : '';
+    $('pInicio').value = p ? p.inicio : hoy;
+    $('pCierre').value = p ? p.cierre : '';
+
+    const resp = [...new Set([...responsablesCat, ...(p && p.responsable ? [p.responsable] : [])])];
+    $('pResponsable').replaceChildren(new Option('Seleccione responsable…', ''), ...resp.map(r => new Option(r, r)));
+    $('pResponsable').value = p ? p.responsable : '';
+
+    const propias = p ? p.sucursales : [];
+    const todas = [...new Set([...sucursalesCat, ...propias])].sort((a, b) => a.localeCompare(b));
+    $('pSucursales').replaceChildren(...todas.map((s, i) =>
+      h('div', { class: 'form-check' },
+        h('input', { class: 'form-check-input chk-suc', type: 'checkbox', id: 'suc' + i, value: s, ...(propias.includes(s) ? { checked: '' } : {}) }),
+        h('label', { class: 'form-check-label', for: 'suc' + i }, s))));
+    if (!todas.length) $('pSucursales').textContent = 'No hay sucursales activas en el catálogo.';
+
+    // Solo lectura si está cerrado
+    ['pNombre', 'pResponsable', 'pInicio'].forEach(id => { $(id).disabled = cerrado; });
+    document.querySelectorAll('.chk-suc').forEach(c => { c.disabled = cerrado; });
+    $('btnGuardarProy').hidden = cerrado;
+    $('btnCerrarProy').hidden = !p || cerrado;
+    $('btnGuardarProy').textContent = p ? 'Guardar cambios' : 'Crear proyecto';
+    pintarLista();
+  }
+
+  async function guardarProyecto() {
+    const form = $('formProyecto');
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+    const sucs = [...document.querySelectorAll('.chk-suc:checked')].map(c => c.value);
+    if (!sucs.length) { aviso('warning', 'Seleccione al menos una sucursal.'); return; }
+
+    const btn = $('btnGuardarProy'); btn.disabled = true;
+    try {
+      const res = await srv('guardarProyecto', {
+        id: $('pId').value, nombre: $('pNombre').value, responsable: $('pResponsable').value,
+        inicio: $('pInicio').value, sucursales: sucs
+      });
+      if (res.exito) {
+        avanceDesactualizado = true;
+        await cargarProyectos();
+        mostrarProyecto(proyectos.find(p => p.id === res.id) || null);
+        aviso('success', 'Proyecto guardado: ', h('strong', {}, res.id));
+      } else aviso('danger', 'No se guardó: ' + res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false;
+  }
+
+  async function cerrarProyecto() {
+    if (!seleccionado) return;
+    if (!confirm('¿Cerrar el proyecto ' + seleccionado.id + '?\n\nQuedará de solo lectura y ya no podrá recibir avances.')) return;
+    const btn = $('btnCerrarProy'); btn.disabled = true;
+    try {
+      const res = await srv('cerrarProyecto', seleccionado.id);
+      if (res.exito) {
+        avanceDesactualizado = true;
+        const id = seleccionado.id;
+        await cargarProyectos();
+        mostrarProyecto(proyectos.find(p => p.id === id) || null);
+        aviso('success', 'Proyecto ', h('strong', {}, id), ' cerrado.');
+      } else aviso('danger', 'No se cerró: ' + res.error);
+    } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+    btn.disabled = false;
+  }
+
+  /* =====================================================================
+     VISTA 4: ACCESOS (solo administradores)
+     ===================================================================== */
+  let accesos = [];
+
+  async function cargarAccesos() {
+    try {
+      accesos = (await srv('obtenerAccesos')).usuarios;
+      pintarAccesos(false);
+    } catch (e) { aviso('danger', e.message); }
+  }
+
+  function pintarAccesos(conNuevo) {
+    const filas = accesos.map(filaAcceso);
+    if (conNuevo) filas.unshift(filaAcceso(null));
+    $('listaUsuarios').replaceChildren(...(filas.length ? filas
+      : [h('tr', {}, h('td', { colspan: 9, class: 'text-muted' }, 'No hay usuarios en la hoja Usuarios.'))]));
+  }
+
+  function filaAcceso(u) {
+    const nuevo = !u;
+    const d = u || { fila: null, nombre: '', correo: '', activo: true, avance: true, proyectos: false, consulta: true, admin: false };
+    const chk = v => h('input', { type: 'checkbox', class: 'form-check-input', ...(v ? { checked: '' } : {}) });
+
+    const nombre = h('input', { class: 'form-control form-control-sm', placeholder: 'Nombre', value: d.nombre, ...(nuevo ? {} : { disabled: '' }) });
+    const correo = h('input', { class: 'form-control form-control-sm', type: 'email', placeholder: 'correo@dominio.com', value: d.correo });
+    const pin = h('input', { class: 'form-control form-control-sm', type: 'password', autocomplete: 'new-password',
+                             placeholder: d.tienePin ? 'Cambiar PIN' : 'Asignar PIN' });
+    const cActivo = chk(d.activo), cAvance = chk(d.avance), cProy = chk(d.proyectos), cCons = chk(d.consulta), cAdmin = chk(d.admin);
+    const btn = h('button', { type: 'button', class: 'btn btn-sm btn-guardar' }, 'Guardar');
+
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const res = await srv('guardarAcceso', {
+          fila: d.fila, nombre: nombre.value, correo: correo.value, activo: cActivo.checked,
+          avance: cAvance.checked, proyectos: cProy.checked, consulta: cCons.checked, admin: cAdmin.checked,
+          pin: pin.value
+        });
+        if (res.exito) { await cargarAccesos(); aviso('success', 'Acceso guardado para ', h('strong', {}, nombre.value.trim()), '.'); }
+        else aviso('danger', 'No se guardó: ' + res.error);
+      } catch (e) { aviso('danger', 'Error de conexión: ' + e.message); }
+      btn.disabled = false;
+    };
+
+    const celda = c => h('td', { class: 'text-center' }, c);
+    return h('tr', {}, h('td', { style: 'min-width:150px' }, nombre), h('td', { style: 'min-width:210px' }, correo),
+      celda(cActivo), celda(cAvance), celda(cProy), celda(cCons), celda(cAdmin),
+      h('td', { style: 'min-width:150px' }, pin,
+        h('div', { class: 'form-text' + (d.tienePin ? '' : ' text-danger') }, d.tienePin ? 'PIN asignado' : 'Sin PIN')),
+      h('td', {}, btn));
+  }
+
+  /* =====================================================================
+     VISTA 3: CONSULTA POR PROYECTO (solo lectura)
+     ===================================================================== */
+  function llenarConsulta() {
+    const previo = $('cProyecto').value;
+    $('cProyecto').replaceChildren(new Option('Seleccione un proyecto…', ''),
+      ...proyectos.map(p => new Option(p.id + ' · ' + p.nombre + (p.estado === 'Cerrado' ? ' (cerrado)' : ''), p.id)));
+    if (previo && proyectos.some(p => p.id === previo)) $('cProyecto').value = previo;
+  }
+
+  async function cargarReporte(id) {
+    const token = ++tokenReporte;
+    $('reporte').replaceChildren();
+    $('btnImprimir').disabled = true;
+    if (!id) return;
+    $('reporte').replaceChildren(h('div', { class: 'tarjeta text-muted' }, 'Cargando actividades…'));
+
+    let det;
+    try { det = await srv('obtenerDetalleProyecto', id); }
+    catch (e) { aviso('danger', 'No se pudo cargar el proyecto: ' + e.message); $('reporte').replaceChildren(); return; }
+    if (token !== tokenReporte) return;
+
+    const p = det.proyecto, acts = det.actividades;
+    const dato = (t, v) => h('div', { class: 'col-sm-6 col-md-4' }, h('div', { class: 'text-muted small' }, t), h('div', {}, v));
+
+    const resumen = h('div', { class: 'tarjeta' },
+      h('div', { class: 'd-flex align-items-center gap-2 mb-3' }, h('h2', { class: 'h5 mb-0' }, p.id + ' · ' + p.nombre), insignia(p.estado)),
+      h('div', { class: 'row g-3' },
+        dato('Responsable', p.responsable), dato('Inicio', fmt(p.inicio)), dato('Cierre', fmt(p.cierre) || '—'),
+        dato('Sucursales', p.sucursales.join(', ') || '—'), dato('Actividades registradas', String(acts.length))));
+
+    const tabla = h('div', { class: 'tarjeta' },
+      h('h3', { class: 'h6 mb-3' }, 'Actividades'),
+      acts.length ? h('div', { class: 'table-responsive' }, h('table', { class: 'table align-middle mb-0' },
+        h('thead', {}, h('tr', {}, ['Folio', 'Fecha', 'Sucursal', 'Responsable', 'Descripción', 'Fotos'].map(t => h('th', {}, t)))),
+        h('tbody', {}, acts.map(a => h('tr', {},
+          h('td', {}, a.folio), h('td', {}, a.fecha), h('td', {}, a.sucursal), h('td', {}, a.responsable),
+          h('td', { class: 'desc' }, a.descripcion), h('td', {}, String(a.numFotos)))))))
+        : h('div', { class: 'text-muted' }, 'Este proyecto aún no tiene actividades.'));
+
+    const conFotos = acts.filter(a => a.numFotos > 0);
+    const contEvid = h('div', {});
+    const evidencias = h('div', { class: 'tarjeta' }, h('h3', { class: 'h6 mb-3' }, 'Evidencias'),
+      conFotos.length ? contEvid : h('div', { class: 'text-muted' }, 'No hay evidencias fotográficas registradas.'));
+
+    $('reporte').replaceChildren(resumen, tabla, evidencias);
+    $('btnImprimir').disabled = false;
+
+    // Las fotos se piden folio por folio para no saturar la carga
+    for (const a of conFotos) {
+      if (token !== tokenReporte) return;
+      const rejilla = h('div', { class: 'evid' }, h('div', { class: 'text-muted' }, 'Cargando fotos…'));
+      contEvid.appendChild(h('div', { class: 'bloque-evid' },
+        h('div', { class: 'fw-semibold mb-1' }, a.folio + ' · ' + a.fecha + ' · ' + a.sucursal),
+        h('div', { class: 'desc small text-muted mb-2' }, a.descripcion), rejilla));
+      try {
+        const lista = await srv('obtenerFotosFolio', a.folio);
+        if (token !== tokenReporte) return;
+        rejilla.replaceChildren(...lista.map(f => f.data
+          ? h('a', { href: f.url, target: '_blank' }, h('img', { src: f.data, alt: f.nombre }))
+          : h('div', { class: 'text-muted small' }, 'Foto no disponible')));
+      } catch (e) { rejilla.replaceChildren(h('div', { class: 'text-danger small' }, 'No se pudieron cargar las fotos.')); }
+    }
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
